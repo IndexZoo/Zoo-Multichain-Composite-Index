@@ -15,15 +15,27 @@ contract UniswapV2Router02Mock is IUniswapV2Router {
     using TransferHelper for address;
     using SafeMath for uint256;
     mapping(address => mapping (address => uint256)) public paths;
+    mapping(address => mapping (address => uint256)) public num;
+    mapping(address => mapping (address => uint256)) public denom;
+    mapping (address => uint256) public liquidity;
 
     constructor() public  {
     }
 
     function setPrice(address token0, address token1, uint256 price) public {
-        paths[token0][token1] = price;
+        // price is in decimals of token1
+        uint256 c = 10**3;
         uint256 d0 = 10**uint256(IXERC20(token0).decimals());
         uint256 d1 = 10**uint256(IXERC20(token1).decimals());
-        paths[token1][token0] = d0.mul(d1).div(price);
+        // paths[token1][token0] = d0.mul(d1).div(price);
+        num[token0][token1] = price;
+        denom[token0][token1] = d0;
+        num[token1][token0] = d1;
+        denom[token1][token0] = price ;
+    }
+
+    function setLiquidity (address _token0, uint256 _liquidity) public {
+
     }
 
     function factory() external override pure returns (address) {}
@@ -98,7 +110,8 @@ contract UniswapV2Router02Mock is IUniswapV2Router {
     ) external override returns (uint[] memory amounts){
         address token0 = path[0];
         address token1 = path[1];
-        uint256 amountOut = paths[path[0]][path[1]].mul(amountIn).div(1 ether);
+        // uint256 amountOut = liquidity[token1].mul(amountIn).div(liquidity[token0]);
+        uint256 amountOut = num[token0][token1].mul(amountIn).div(denom[token0][token1]);
         require(amountOut >= amountOutMin, "Insufficient Amount");
         token1.safeTransfer( to, amountOut);
         token0.safeTransferFrom(msg.sender, address(this), amountIn);
@@ -115,7 +128,7 @@ contract UniswapV2Router02Mock is IUniswapV2Router {
     ) external override returns (uint[] memory amounts){
         address token0 = path[0];
         address token1 = path[1];
-        uint256 amountIn = paths[token1][token0].mul(amountOut).div(1 ether);
+        uint256 amountIn = num[token1][token0].mul(amountOut).div(denom[token1][token0]);
         require(amountIn <= amountInMax, "Insufficient Amount");
  
         IERC20(token1).transfer( to, amountOut);
@@ -145,7 +158,8 @@ contract UniswapV2Router02Mock is IUniswapV2Router {
     function getAmountsOut(uint amountIn, address[] calldata path) external override view returns (uint[] memory amounts){
         address token0 = path[0];
         address token1 = path[1];
-        uint256 amountOut = paths[token0][token1].mul(amountIn).div(1 ether);
+        uint256 amountOut = num[token0][token1].mul(amountIn).div(denom[token0][token1]);
+
         amounts = new uint[] (2);
         amounts[0] = amountIn; 
         amounts[1] = amountOut;       
@@ -153,7 +167,7 @@ contract UniswapV2Router02Mock is IUniswapV2Router {
     function getAmountsIn(uint amountOut, address[] calldata path) external override view returns (uint[] memory amounts){
         address token0 = path[0];
         address token1 = path[1];
-        uint256 amountIn = paths[token1][token0].mul(amountOut).div(1 ether);
+        uint256 amountIn = num[token1][token0].mul(amountOut).div(denom[token1][token0]);
         amounts = new uint[] (2);
         amounts[0] = amountIn; 
         amounts[1] = amountOut; 

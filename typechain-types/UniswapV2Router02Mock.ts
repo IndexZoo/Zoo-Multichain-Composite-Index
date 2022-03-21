@@ -24,17 +24,21 @@ export interface UniswapV2Router02MockInterface extends utils.Interface {
     "WETH()": FunctionFragment;
     "addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)": FunctionFragment;
     "addLiquidityETH(address,uint256,uint256,uint256,address,uint256)": FunctionFragment;
+    "denom(address,address)": FunctionFragment;
     "factory()": FunctionFragment;
     "getAmountIn(uint256,uint256,uint256)": FunctionFragment;
     "getAmountOut(uint256,uint256,uint256)": FunctionFragment;
     "getAmountsIn(uint256,address[])": FunctionFragment;
     "getAmountsOut(uint256,address[])": FunctionFragment;
+    "liquidity(address)": FunctionFragment;
+    "num(address,address)": FunctionFragment;
     "paths(address,address)": FunctionFragment;
     "quote(uint256,uint256,uint256)": FunctionFragment;
     "removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)": FunctionFragment;
     "removeLiquidityETH(address,uint256,uint256,uint256,address,uint256)": FunctionFragment;
     "removeLiquidityETHWithPermit(address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)": FunctionFragment;
     "removeLiquidityWithPermit(address,address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)": FunctionFragment;
+    "setLiquidity(address,uint256)": FunctionFragment;
     "setPrice(address,address,uint256)": FunctionFragment;
     "swapETHForExactTokens(uint256,address[],address,uint256)": FunctionFragment;
     "swapExactETHForTokens(uint256,address[],address,uint256)": FunctionFragment;
@@ -69,6 +73,10 @@ export interface UniswapV2Router02MockInterface extends utils.Interface {
       BigNumberish
     ]
   ): string;
+  encodeFunctionData(
+    functionFragment: "denom",
+    values: [string, string]
+  ): string;
   encodeFunctionData(functionFragment: "factory", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "getAmountIn",
@@ -86,6 +94,8 @@ export interface UniswapV2Router02MockInterface extends utils.Interface {
     functionFragment: "getAmountsOut",
     values: [BigNumberish, string[]]
   ): string;
+  encodeFunctionData(functionFragment: "liquidity", values: [string]): string;
+  encodeFunctionData(functionFragment: "num", values: [string, string]): string;
   encodeFunctionData(
     functionFragment: "paths",
     values: [string, string]
@@ -149,6 +159,10 @@ export interface UniswapV2Router02MockInterface extends utils.Interface {
     ]
   ): string;
   encodeFunctionData(
+    functionFragment: "setLiquidity",
+    values: [string, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "setPrice",
     values: [string, string, BigNumberish]
   ): string;
@@ -186,6 +200,7 @@ export interface UniswapV2Router02MockInterface extends utils.Interface {
     functionFragment: "addLiquidityETH",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "denom", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "factory", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getAmountIn",
@@ -203,6 +218,8 @@ export interface UniswapV2Router02MockInterface extends utils.Interface {
     functionFragment: "getAmountsOut",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "liquidity", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "num", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paths", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "quote", data: BytesLike): Result;
   decodeFunctionResult(
@@ -219,6 +236,10 @@ export interface UniswapV2Router02MockInterface extends utils.Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "removeLiquidityWithPermit",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setLiquidity",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setPrice", data: BytesLike): Result;
@@ -302,6 +323,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
       overrides?: PayableOverrides & { from?: string | Promise<string> }
     ): Promise<ContractTransaction>;
 
+    denom(
+      arg0: string,
+      arg1: string,
+      overrides?: CallOverrides
+    ): Promise<[BigNumber]>;
+
     factory(overrides?: CallOverrides): Promise<[string]>;
 
     getAmountIn(
@@ -329,6 +356,14 @@ export interface UniswapV2Router02Mock extends BaseContract {
       path: string[],
       overrides?: CallOverrides
     ): Promise<[BigNumber[]] & { amounts: BigNumber[] }>;
+
+    liquidity(arg0: string, overrides?: CallOverrides): Promise<[BigNumber]>;
+
+    num(
+      arg0: string,
+      arg1: string,
+      overrides?: CallOverrides
+    ): Promise<[BigNumber]>;
 
     paths(
       arg0: string,
@@ -390,6 +425,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
       v: BigNumberish,
       r: BytesLike,
       s: BytesLike,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<ContractTransaction>;
+
+    setLiquidity(
+      _token0: string,
+      _liquidity: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<ContractTransaction>;
 
@@ -477,6 +518,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
     overrides?: PayableOverrides & { from?: string | Promise<string> }
   ): Promise<ContractTransaction>;
 
+  denom(
+    arg0: string,
+    arg1: string,
+    overrides?: CallOverrides
+  ): Promise<BigNumber>;
+
   factory(overrides?: CallOverrides): Promise<string>;
 
   getAmountIn(
@@ -504,6 +551,14 @@ export interface UniswapV2Router02Mock extends BaseContract {
     path: string[],
     overrides?: CallOverrides
   ): Promise<BigNumber[]>;
+
+  liquidity(arg0: string, overrides?: CallOverrides): Promise<BigNumber>;
+
+  num(
+    arg0: string,
+    arg1: string,
+    overrides?: CallOverrides
+  ): Promise<BigNumber>;
 
   paths(
     arg0: string,
@@ -565,6 +620,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
     v: BigNumberish,
     r: BytesLike,
     s: BytesLike,
+    overrides?: Overrides & { from?: string | Promise<string> }
+  ): Promise<ContractTransaction>;
+
+  setLiquidity(
+    _token0: string,
+    _liquidity: BigNumberish,
     overrides?: Overrides & { from?: string | Promise<string> }
   ): Promise<ContractTransaction>;
 
@@ -664,6 +725,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
       }
     >;
 
+    denom(
+      arg0: string,
+      arg1: string,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
+
     factory(overrides?: CallOverrides): Promise<string>;
 
     getAmountIn(
@@ -691,6 +758,14 @@ export interface UniswapV2Router02Mock extends BaseContract {
       path: string[],
       overrides?: CallOverrides
     ): Promise<BigNumber[]>;
+
+    liquidity(arg0: string, overrides?: CallOverrides): Promise<BigNumber>;
+
+    num(
+      arg0: string,
+      arg1: string,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
 
     paths(
       arg0: string,
@@ -762,6 +837,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
     ): Promise<
       [BigNumber, BigNumber] & { amountA: BigNumber; amountB: BigNumber }
     >;
+
+    setLiquidity(
+      _token0: string,
+      _liquidity: BigNumberish,
+      overrides?: CallOverrides
+    ): Promise<void>;
 
     setPrice(
       token0: string,
@@ -850,6 +931,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
       overrides?: PayableOverrides & { from?: string | Promise<string> }
     ): Promise<BigNumber>;
 
+    denom(
+      arg0: string,
+      arg1: string,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
+
     factory(overrides?: CallOverrides): Promise<BigNumber>;
 
     getAmountIn(
@@ -875,6 +962,14 @@ export interface UniswapV2Router02Mock extends BaseContract {
     getAmountsOut(
       amountIn: BigNumberish,
       path: string[],
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
+
+    liquidity(arg0: string, overrides?: CallOverrides): Promise<BigNumber>;
+
+    num(
+      arg0: string,
+      arg1: string,
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
@@ -938,6 +1033,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
       v: BigNumberish,
       r: BytesLike,
       s: BytesLike,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<BigNumber>;
+
+    setLiquidity(
+      _token0: string,
+      _liquidity: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<BigNumber>;
 
@@ -1026,6 +1127,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
       overrides?: PayableOverrides & { from?: string | Promise<string> }
     ): Promise<PopulatedTransaction>;
 
+    denom(
+      arg0: string,
+      arg1: string,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
     factory(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     getAmountIn(
@@ -1051,6 +1158,17 @@ export interface UniswapV2Router02Mock extends BaseContract {
     getAmountsOut(
       amountIn: BigNumberish,
       path: string[],
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
+    liquidity(
+      arg0: string,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
+    num(
+      arg0: string,
+      arg1: string,
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
@@ -1114,6 +1232,12 @@ export interface UniswapV2Router02Mock extends BaseContract {
       v: BigNumberish,
       r: BytesLike,
       s: BytesLike,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<PopulatedTransaction>;
+
+    setLiquidity(
+      _token0: string,
+      _liquidity: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<PopulatedTransaction>;
 

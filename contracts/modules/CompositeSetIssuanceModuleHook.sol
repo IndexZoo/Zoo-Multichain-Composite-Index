@@ -22,6 +22,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
 import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
 import { IUniswapV2Router } from "@setprotocol/set-protocol-v2/contracts/interfaces/external/IUniswapV2Router.sol";
 import { IController } from "@setprotocol/set-protocol-v2/contracts/interfaces/IController.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import { IModuleIssuanceHookV3 as IModuleIssuanceHook } from "../interfaces/IModuleIssuanceHookV3.sol";
 import { Invoke } from "@setprotocol/set-protocol-v2/contracts/protocol/lib/Invoke.sol";
@@ -31,7 +32,7 @@ import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/Prec
 import { IExchangeAdapterV3} from "../interfaces/IExchangeAdapterV3.sol";
 import { IndexUtils } from "../lib/IndexUtils.sol";
 
-contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook {
+contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     using Invoke for ISetToken;
     using IndexUtils for ISetToken;
     using Position for ISetToken;
@@ -49,8 +50,7 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook {
         router = _router;
     }
 
-    function initialize(ISetToken _setToken) external override {
-        // TODO: restrict
+    function initialize(ISetToken _setToken) external override onlyOwner {
         _setToken.initializeModule();
     }
 
@@ -59,27 +59,37 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook {
 
     function componentIssueHook(
         ISetToken _setToken,
-        uint256 _quoteQuantity,
+        uint256 _quoteQuantityMax,
         uint256 _componentQuantity,
         IERC20 _component,
         bool /* _isEquity */
-    ) external override {
-        _approveRouter(_setToken, address(quote), _quoteQuantity);
-        uint256[] memory amounts = _swapToIndex(_setToken, address(_component), _componentQuantity, _quoteQuantity);
-        require(amounts[1] == _componentQuantity, "Composite: Undesired o/p swap");
+    ) 
+    external 
+    override 
+    onlyOwner 
+    {
+        _approveRouter(_setToken, address(quote), _quoteQuantityMax);
+        uint256[] memory amounts = _swapToIndex(_setToken, address(_component), _componentQuantity, _quoteQuantityMax);
     }
 
     function componentRedeemHook(
         ISetToken _setToken,
-        uint256 _quoteQuantity,
-        uint256 _setTokenQuantity,
+        uint256 _quoteQuantityMin,
+        uint256 _componentQuantity,
         IERC20 _component,
         bool /* _isEquity */
-    ) external override {
+    ) 
+    external 
+    override
+    onlyOwner
+    {
+        _approveRouter(_setToken, address(_component), _componentQuantity);
+        uint256[] memory amounts = _swapToQuote(_setToken, address(_component), _componentQuantity, _quoteQuantityMin);
+
         // Send the component to the settoken
-        int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this));
-        uint256 totalNotionalExternalModule = _setTokenQuantity.preciseMul(externalPositionUnit.toUint256());
-        _component.transfer(address(_setToken), totalNotionalExternalModule);
+        // int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this));
+        // uint256 totalNotionalExternalModule = _setTokenQuantity.preciseMul(externalPositionUnit.toUint256());
+        // _component.transfer(address(_setToken), totalNotionalExternalModule);
     }
 
 
@@ -124,6 +134,34 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook {
     }
 
     /* ============ Private Functions ============ */
+
+   /**
+     * Instructs the SetToken to set approvals of the ERC20 token to a spender.
+     *
+     * @param _setToken                      SetToken instance to invoke
+     * @param _component                     ERC20 component of Index / Output of swap
+     * @param _componentQuantity             Desired output quantity of component 
+     * @param _quoteComponentQuantityMin     Minimum allowed quantity of input of swap 
+     */
+    function _swapToQuote(
+        ISetToken _setToken,
+        address _component,
+        uint256 _componentQuantity,
+        uint256 _quoteComponentQuantityMin
+    )
+    private
+    returns (uint256[] memory amounts)
+    {
+        IExchangeAdapterV3 adapter = IExchangeAdapterV3(getAndValidateAdapter("UNISWAP"));
+        amounts = _setToken.invokeSwapExact(
+            adapter, 
+            _component,
+            address(quote),
+            _componentQuantity, 
+            _quoteComponentQuantityMin
+        );
+    }
+
    /**
      * Instructs the SetToken to set approvals of the ERC20 token to a spender.
      *
@@ -144,6 +182,7 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook {
         IExchangeAdapterV3 adapter = IExchangeAdapterV3(getAndValidateAdapter("UNISWAP"));
         amounts = _setToken.invokeSwapToIndex(
             adapter, 
+            address(quote),
             _component,
             _componentQuantity, 
             _quoteComponentQuantityMax 

@@ -36,7 +36,7 @@ const initUniswapMockRouter = async(owner: Account, weth:  Contract, dai:  Stand
       await btc.approve(router.address, MAX_UINT_256);
 
       await router.addLiquidity(weth.address, dai.address, ether(50), ether(50000), ether(49), ether(49900), owner.address, MAX_UINT_256);
-      await router.addLiquidity(btc.address, dai.address, bitcoin(50), ether(500000), bitcoin(49), ether(49900), owner.address, MAX_UINT_256);
+      await router.addLiquidity(btc.address, dai.address, bitcoin(50), ether(500000), bitcoin(49), ether(499900), owner.address, MAX_UINT_256);
     
       return router;
 }
@@ -89,8 +89,8 @@ class Context {
    */
   public async createSetToken(): Promise<void> {
       const tx =  await this.ct.creator.create(
-        [this.tokens.dai.address, this.tokens.weth.address, this.tokens.btc.address ],
-        [ether(10), ether(0.1), ether(0.01) ],
+        [this.tokens.weth.address, this.tokens.btc.address ],
+        [ether(0.1), ether(0.01) ],
         [this.subjectModule!.address], 
         this.accounts.owner.address, 
         "Compo", 
@@ -106,7 +106,7 @@ class Context {
       await this.subjectModule!.initialize(deployedSetToken.address, this.tokens.dai.address,  this.mockRouter!.address);
 
       // addToController
-      let component = (await deployedSetToken.getComponents())[1];  // TODO: make it 0
+      let component = (await deployedSetToken.getComponents())[0];
       let externalModule  =   (await deployedSetToken.getExternalPositionModules(component ))[0];
       await this.ct.controller.addModule(externalModule);
       

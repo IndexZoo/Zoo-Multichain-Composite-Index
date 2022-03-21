@@ -27,6 +27,8 @@ import { IExchangeAdapterV3} from "../interfaces/IExchangeAdapterV3.sol";
 import { Position } from "@setprotocol/set-protocol-v2/contracts/protocol/lib/Position.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
+import {console} from "hardhat/console.sol";
+
 /**
  * @title IndexUtils 
  * @author IndexTech Ltd. 
@@ -39,9 +41,38 @@ library IndexUtils {
     using Position for ISetToken;
     using Address for address;
 
+    function invokeSwapExact(
+        ISetToken _setToken,
+        IExchangeAdapterV3 adapter,
+        address _tokenIn,
+        address _tokenOut,
+        uint256 _amountIn,
+        uint256 _amountOutMin
+    )
+       internal 
+       returns (uint256[] memory amounts)
+    {
+        (
+            address target,
+            uint256 callValue,
+            bytes memory methodData
+        ) = adapter.getTradeCalldata(
+            _tokenIn, 
+            _tokenOut, 
+            address(_setToken), 
+            _amountIn, 
+            _amountOutMin, 
+            true,
+            ""
+        );
+        bytes memory data = _setToken.invoke(target, callValue, methodData);
+        amounts = abi.decode(data, (uint256[]));
+    }
+
     function invokeSwapToIndex(
         ISetToken _setToken,
         IExchangeAdapterV3 adapter,
+        address _tokenIn,
         address _tokenOut,
         uint256 _amountOut,
         uint256 _amountInMax
@@ -49,14 +80,12 @@ library IndexUtils {
        internal 
        returns (uint256[] memory amounts)
     {
-        _setToken.getComponents()[0];
-        address tokenIn;
         (
             address target,
             uint256 callValue,
             bytes memory methodData
         ) = adapter.getTradeCalldata(
-            tokenIn, 
+            _tokenIn, 
             _tokenOut, 
             address(_setToken), 
             _amountOut, 

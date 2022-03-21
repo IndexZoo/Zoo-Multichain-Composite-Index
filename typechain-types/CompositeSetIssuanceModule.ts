@@ -20,15 +20,21 @@ import { TypedEventFilter, TypedEvent, TypedListener, OnEvent } from "./common";
 export interface CompositeSetIssuanceModuleInterface extends utils.Interface {
   contractName: "CompositeSetIssuanceModule";
   functions: {
+    "_calculateSlippageAmounts(uint256[],uint256,bool)": FunctionFragment;
     "configs(address)": FunctionFragment;
     "controller()": FunctionFragment;
     "getSome(address,uint256,bool)": FunctionFragment;
     "initialize(address,address,address)": FunctionFragment;
     "initializeHook(address)": FunctionFragment;
     "issue(address,uint256,address,uint256)": FunctionFragment;
+    "redeem(address,uint256,address,uint256)": FunctionFragment;
     "removeModule()": FunctionFragment;
   };
 
+  encodeFunctionData(
+    functionFragment: "_calculateSlippageAmounts",
+    values: [BigNumberish[], BigNumberish, boolean]
+  ): string;
   encodeFunctionData(functionFragment: "configs", values: [string]): string;
   encodeFunctionData(
     functionFragment: "controller",
@@ -51,10 +57,18 @@ export interface CompositeSetIssuanceModuleInterface extends utils.Interface {
     values: [string, BigNumberish, string, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "redeem",
+    values: [string, BigNumberish, string, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "removeModule",
     values?: undefined
   ): string;
 
+  decodeFunctionResult(
+    functionFragment: "_calculateSlippageAmounts",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "configs", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "controller", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getSome", data: BytesLike): Result;
@@ -64,6 +78,7 @@ export interface CompositeSetIssuanceModuleInterface extends utils.Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "issue", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "redeem", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "removeModule",
     data: BytesLike
@@ -71,9 +86,11 @@ export interface CompositeSetIssuanceModuleInterface extends utils.Interface {
 
   events: {
     "SetTokenIssued(address,address,address,uint256)": EventFragment;
+    "SetTokenRedeemed(address,address,address,uint256)": EventFragment;
   };
 
   getEvent(nameOrSignatureOrTopic: "SetTokenIssued"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "SetTokenRedeemed"): EventFragment;
 }
 
 export type SetTokenIssuedEvent = TypedEvent<
@@ -82,6 +99,14 @@ export type SetTokenIssuedEvent = TypedEvent<
 >;
 
 export type SetTokenIssuedEventFilter = TypedEventFilter<SetTokenIssuedEvent>;
+
+export type SetTokenRedeemedEvent = TypedEvent<
+  [string, string, string, BigNumber],
+  { _setToken: string; _redeemer: string; _to: string; _quantity: BigNumber }
+>;
+
+export type SetTokenRedeemedEventFilter =
+  TypedEventFilter<SetTokenRedeemedEvent>;
 
 export interface CompositeSetIssuanceModule extends BaseContract {
   contractName: "CompositeSetIssuanceModule";
@@ -111,10 +136,17 @@ export interface CompositeSetIssuanceModule extends BaseContract {
   removeListener: OnEvent<this>;
 
   functions: {
+    _calculateSlippageAmounts(
+      _expectedAmounts: BigNumberish[],
+      _thresholdAmount: BigNumberish,
+      _isIssue: boolean,
+      overrides?: CallOverrides
+    ): Promise<[BigNumber[]]>;
+
     configs(
       arg0: string,
       overrides?: CallOverrides
-    ): Promise<[string] & { router: string }>;
+    ): Promise<[string, string] & { router: string; quote: string }>;
 
     controller(overrides?: CallOverrides): Promise<[string]>;
 
@@ -123,7 +155,7 @@ export interface CompositeSetIssuanceModule extends BaseContract {
       _quantity: BigNumberish,
       _isIssue: boolean,
       overrides?: CallOverrides
-    ): Promise<[string[], BigNumber[], BigNumber]>;
+    ): Promise<[string[], BigNumber[]]>;
 
     initialize(
       _setToken: string,
@@ -145,12 +177,30 @@ export interface CompositeSetIssuanceModule extends BaseContract {
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<ContractTransaction>;
 
+    redeem(
+      _setToken: string,
+      _quantity: BigNumberish,
+      _to: string,
+      _mintAmountRedeemed: BigNumberish,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<ContractTransaction>;
+
     removeModule(
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<ContractTransaction>;
   };
 
-  configs(arg0: string, overrides?: CallOverrides): Promise<string>;
+  _calculateSlippageAmounts(
+    _expectedAmounts: BigNumberish[],
+    _thresholdAmount: BigNumberish,
+    _isIssue: boolean,
+    overrides?: CallOverrides
+  ): Promise<BigNumber[]>;
+
+  configs(
+    arg0: string,
+    overrides?: CallOverrides
+  ): Promise<[string, string] & { router: string; quote: string }>;
 
   controller(overrides?: CallOverrides): Promise<string>;
 
@@ -159,7 +209,7 @@ export interface CompositeSetIssuanceModule extends BaseContract {
     _quantity: BigNumberish,
     _isIssue: boolean,
     overrides?: CallOverrides
-  ): Promise<[string[], BigNumber[], BigNumber]>;
+  ): Promise<[string[], BigNumber[]]>;
 
   initialize(
     _setToken: string,
@@ -181,12 +231,30 @@ export interface CompositeSetIssuanceModule extends BaseContract {
     overrides?: Overrides & { from?: string | Promise<string> }
   ): Promise<ContractTransaction>;
 
+  redeem(
+    _setToken: string,
+    _quantity: BigNumberish,
+    _to: string,
+    _mintAmountRedeemed: BigNumberish,
+    overrides?: Overrides & { from?: string | Promise<string> }
+  ): Promise<ContractTransaction>;
+
   removeModule(
     overrides?: Overrides & { from?: string | Promise<string> }
   ): Promise<ContractTransaction>;
 
   callStatic: {
-    configs(arg0: string, overrides?: CallOverrides): Promise<string>;
+    _calculateSlippageAmounts(
+      _expectedAmounts: BigNumberish[],
+      _thresholdAmount: BigNumberish,
+      _isIssue: boolean,
+      overrides?: CallOverrides
+    ): Promise<BigNumber[]>;
+
+    configs(
+      arg0: string,
+      overrides?: CallOverrides
+    ): Promise<[string, string] & { router: string; quote: string }>;
 
     controller(overrides?: CallOverrides): Promise<string>;
 
@@ -195,7 +263,7 @@ export interface CompositeSetIssuanceModule extends BaseContract {
       _quantity: BigNumberish,
       _isIssue: boolean,
       overrides?: CallOverrides
-    ): Promise<[string[], BigNumber[], BigNumber]>;
+    ): Promise<[string[], BigNumber[]]>;
 
     initialize(
       _setToken: string,
@@ -211,6 +279,14 @@ export interface CompositeSetIssuanceModule extends BaseContract {
       _quantity: BigNumberish,
       _to: string,
       _maxAmountIn: BigNumberish,
+      overrides?: CallOverrides
+    ): Promise<void>;
+
+    redeem(
+      _setToken: string,
+      _quantity: BigNumberish,
+      _to: string,
+      _mintAmountRedeemed: BigNumberish,
       overrides?: CallOverrides
     ): Promise<void>;
 
@@ -230,9 +306,29 @@ export interface CompositeSetIssuanceModule extends BaseContract {
       _to?: string | null,
       _quantity?: null
     ): SetTokenIssuedEventFilter;
+
+    "SetTokenRedeemed(address,address,address,uint256)"(
+      _setToken?: string | null,
+      _redeemer?: string | null,
+      _to?: string | null,
+      _quantity?: null
+    ): SetTokenRedeemedEventFilter;
+    SetTokenRedeemed(
+      _setToken?: string | null,
+      _redeemer?: string | null,
+      _to?: string | null,
+      _quantity?: null
+    ): SetTokenRedeemedEventFilter;
   };
 
   estimateGas: {
+    _calculateSlippageAmounts(
+      _expectedAmounts: BigNumberish[],
+      _thresholdAmount: BigNumberish,
+      _isIssue: boolean,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
+
     configs(arg0: string, overrides?: CallOverrides): Promise<BigNumber>;
 
     controller(overrides?: CallOverrides): Promise<BigNumber>;
@@ -264,12 +360,27 @@ export interface CompositeSetIssuanceModule extends BaseContract {
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<BigNumber>;
 
+    redeem(
+      _setToken: string,
+      _quantity: BigNumberish,
+      _to: string,
+      _mintAmountRedeemed: BigNumberish,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<BigNumber>;
+
     removeModule(
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<BigNumber>;
   };
 
   populateTransaction: {
+    _calculateSlippageAmounts(
+      _expectedAmounts: BigNumberish[],
+      _thresholdAmount: BigNumberish,
+      _isIssue: boolean,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
     configs(
       arg0: string,
       overrides?: CallOverrides
@@ -301,6 +412,14 @@ export interface CompositeSetIssuanceModule extends BaseContract {
       _quantity: BigNumberish,
       _to: string,
       _maxAmountIn: BigNumberish,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<PopulatedTransaction>;
+
+    redeem(
+      _setToken: string,
+      _quantity: BigNumberish,
+      _to: string,
+      _mintAmountRedeemed: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<PopulatedTransaction>;
 

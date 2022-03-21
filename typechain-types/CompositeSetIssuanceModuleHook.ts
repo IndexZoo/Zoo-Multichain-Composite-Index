@@ -13,7 +13,7 @@ import {
   Signer,
   utils,
 } from "ethers";
-import { FunctionFragment, Result } from "@ethersproject/abi";
+import { FunctionFragment, Result, EventFragment } from "@ethersproject/abi";
 import { Listener, Provider } from "@ethersproject/providers";
 import { TypedEventFilter, TypedEvent, TypedListener, OnEvent } from "./common";
 
@@ -27,8 +27,11 @@ export interface CompositeSetIssuanceModuleHookInterface
     "initialize(address)": FunctionFragment;
     "moduleIssueHook(address,uint256)": FunctionFragment;
     "moduleRedeemHook(address,uint256)": FunctionFragment;
+    "owner()": FunctionFragment;
     "quote()": FunctionFragment;
+    "renounceOwnership()": FunctionFragment;
     "router()": FunctionFragment;
+    "transferOwnership(address)": FunctionFragment;
   };
 
   encodeFunctionData(
@@ -52,8 +55,17 @@ export interface CompositeSetIssuanceModuleHookInterface
     functionFragment: "moduleRedeemHook",
     values: [string, BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(functionFragment: "quote", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "renounceOwnership",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "router", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "transferOwnership",
+    values: [string]
+  ): string;
 
   decodeFunctionResult(
     functionFragment: "componentIssueHook",
@@ -73,11 +85,32 @@ export interface CompositeSetIssuanceModuleHookInterface
     functionFragment: "moduleRedeemHook",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "quote", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "renounceOwnership",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "router", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "transferOwnership",
+    data: BytesLike
+  ): Result;
 
-  events: {};
+  events: {
+    "OwnershipTransferred(address,address)": EventFragment;
+  };
+
+  getEvent(nameOrSignatureOrTopic: "OwnershipTransferred"): EventFragment;
 }
+
+export type OwnershipTransferredEvent = TypedEvent<
+  [string, string],
+  { previousOwner: string; newOwner: string }
+>;
+
+export type OwnershipTransferredEventFilter =
+  TypedEventFilter<OwnershipTransferredEvent>;
 
 export interface CompositeSetIssuanceModuleHook extends BaseContract {
   contractName: "CompositeSetIssuanceModuleHook";
@@ -109,7 +142,7 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
   functions: {
     componentIssueHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
+      _quoteQuantityMax: BigNumberish,
       _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
@@ -118,8 +151,8 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
 
     componentRedeemHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
-      _setTokenQuantity: BigNumberish,
+      _quoteQuantityMin: BigNumberish,
+      _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
       overrides?: Overrides & { from?: string | Promise<string> }
@@ -144,14 +177,25 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<ContractTransaction>;
 
+    owner(overrides?: CallOverrides): Promise<[string]>;
+
     quote(overrides?: CallOverrides): Promise<[string]>;
 
+    renounceOwnership(
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<ContractTransaction>;
+
     router(overrides?: CallOverrides): Promise<[string]>;
+
+    transferOwnership(
+      newOwner: string,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<ContractTransaction>;
   };
 
   componentIssueHook(
     _setToken: string,
-    _quoteQuantity: BigNumberish,
+    _quoteQuantityMax: BigNumberish,
     _componentQuantity: BigNumberish,
     _component: string,
     arg4: boolean,
@@ -160,8 +204,8 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
 
   componentRedeemHook(
     _setToken: string,
-    _quoteQuantity: BigNumberish,
-    _setTokenQuantity: BigNumberish,
+    _quoteQuantityMin: BigNumberish,
+    _componentQuantity: BigNumberish,
     _component: string,
     arg4: boolean,
     overrides?: Overrides & { from?: string | Promise<string> }
@@ -186,14 +230,25 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
     overrides?: Overrides & { from?: string | Promise<string> }
   ): Promise<ContractTransaction>;
 
+  owner(overrides?: CallOverrides): Promise<string>;
+
   quote(overrides?: CallOverrides): Promise<string>;
 
+  renounceOwnership(
+    overrides?: Overrides & { from?: string | Promise<string> }
+  ): Promise<ContractTransaction>;
+
   router(overrides?: CallOverrides): Promise<string>;
+
+  transferOwnership(
+    newOwner: string,
+    overrides?: Overrides & { from?: string | Promise<string> }
+  ): Promise<ContractTransaction>;
 
   callStatic: {
     componentIssueHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
+      _quoteQuantityMax: BigNumberish,
       _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
@@ -202,8 +257,8 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
 
     componentRedeemHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
-      _setTokenQuantity: BigNumberish,
+      _quoteQuantityMin: BigNumberish,
+      _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
       overrides?: CallOverrides
@@ -225,17 +280,35 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
       overrides?: CallOverrides
     ): Promise<void>;
 
+    owner(overrides?: CallOverrides): Promise<string>;
+
     quote(overrides?: CallOverrides): Promise<string>;
 
+    renounceOwnership(overrides?: CallOverrides): Promise<void>;
+
     router(overrides?: CallOverrides): Promise<string>;
+
+    transferOwnership(
+      newOwner: string,
+      overrides?: CallOverrides
+    ): Promise<void>;
   };
 
-  filters: {};
+  filters: {
+    "OwnershipTransferred(address,address)"(
+      previousOwner?: string | null,
+      newOwner?: string | null
+    ): OwnershipTransferredEventFilter;
+    OwnershipTransferred(
+      previousOwner?: string | null,
+      newOwner?: string | null
+    ): OwnershipTransferredEventFilter;
+  };
 
   estimateGas: {
     componentIssueHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
+      _quoteQuantityMax: BigNumberish,
       _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
@@ -244,8 +317,8 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
 
     componentRedeemHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
-      _setTokenQuantity: BigNumberish,
+      _quoteQuantityMin: BigNumberish,
+      _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
       overrides?: Overrides & { from?: string | Promise<string> }
@@ -270,15 +343,26 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<BigNumber>;
 
+    owner(overrides?: CallOverrides): Promise<BigNumber>;
+
     quote(overrides?: CallOverrides): Promise<BigNumber>;
 
+    renounceOwnership(
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<BigNumber>;
+
     router(overrides?: CallOverrides): Promise<BigNumber>;
+
+    transferOwnership(
+      newOwner: string,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<BigNumber>;
   };
 
   populateTransaction: {
     componentIssueHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
+      _quoteQuantityMax: BigNumberish,
       _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
@@ -287,8 +371,8 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
 
     componentRedeemHook(
       _setToken: string,
-      _quoteQuantity: BigNumberish,
-      _setTokenQuantity: BigNumberish,
+      _quoteQuantityMin: BigNumberish,
+      _componentQuantity: BigNumberish,
       _component: string,
       arg4: boolean,
       overrides?: Overrides & { from?: string | Promise<string> }
@@ -313,8 +397,19 @@ export interface CompositeSetIssuanceModuleHook extends BaseContract {
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<PopulatedTransaction>;
 
+    owner(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
     quote(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
+    renounceOwnership(
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<PopulatedTransaction>;
+
     router(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    transferOwnership(
+      newOwner: string,
+      overrides?: Overrides & { from?: string | Promise<string> }
+    ): Promise<PopulatedTransaction>;
   };
 }

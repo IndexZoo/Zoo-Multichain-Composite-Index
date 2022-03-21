@@ -69,6 +69,7 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ==================== Struct ============================= */
     struct Config {
         IUniswapV2Router router;
+        IERC20 quote;
     }
 
     /* ============ Events ============ */
@@ -76,6 +77,13 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     event SetTokenIssued(
         ISetToken indexed _setToken,
         address indexed _issuer,
+        address indexed _to,
+        uint256 _quantity
+    );
+
+    event SetTokenRedeemed(
+        ISetToken indexed _setToken,
+        address indexed _redeemer,
         address indexed _to,
         uint256 _quantity
     );
@@ -118,16 +126,55 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
 
         (
             address[] memory components,
-            uint256[] memory equityUnits,
-            uint256 equityUnitsSum
+            uint256[] memory equityUnits
         ) = _calculateRequiredComponentIssuanceUnits(_setToken, _quantity, true);
-        require (equityUnitsSum <= _maxAmountIn, "Composite: insufficient amountIn");
+        require (_sumOf(equityUnits) <= _maxAmountIn, "Index: insufficient amountIn"); 
 
-        _resolveEquityPositions(_setToken, _quantity, _to, true, components, equityUnits, equityUnitsSum);
-
+        _resolveEquityPositions(_setToken, _quantity, _to, true, components, equityUnits, _maxAmountIn );
         _setToken.mint(_to, _quantity);
 
         emit SetTokenIssued(
+            _setToken,
+            msg.sender,
+            _to,
+            _quantity
+        );
+    }
+
+    /**
+     * Returns components from the SetToken, unwinds any external module component positions and burns the SetToken.
+     * If the token has debt positions, the module transfers in the required debt amounts from the caller and uses
+     * those funds to repay the debts on behalf of the SetToken. All debt will be paid down first then equity positions
+     * will be returned to the minting address. If specified, a fee will be charged on redeem.
+     *
+     * @param _setToken         Instance of the SetToken to redeem
+     * @param _quantity         Quantity of SetToken to redeem
+     * @param _to               Address to send collateral to
+     */
+    function redeem(
+        ISetToken _setToken,
+        uint256 _quantity,
+        address _to,
+        uint256 _mintAmountRedeemed
+    )
+        external
+        virtual        
+        nonReentrant
+        onlyValidAndInitializedSet(_setToken)
+    {
+        require(_quantity > 0, "Redeem quantity must be > 0");
+
+        // Place burn after pre-redeem hooks because burning tokens may lead to false accounting of synced positions
+        _setToken.burn(msg.sender, _quantity);
+
+        (
+            address[] memory components,
+            uint256[] memory equityUnits
+        ) = _calculateRequiredComponentIssuanceUnits(_setToken, _quantity, false);
+        _validateAmountSlippage(equityUnits, _mintAmountRedeemed);
+        _resolveEquityPositions(_setToken, _quantity, _to, false, components, equityUnits, _mintAmountRedeemed);
+
+        emit SetTokenRedeemed(
             _setToken,
             msg.sender,
             _to,
@@ -150,24 +197,22 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         onlySetManager(_setToken, msg.sender)
         onlyValidAndPendingSet(_setToken)
     {
-        // TODO: ensure it contains at least 2 comps
-        // TODO: validate setToken is cool
-        //   - each component should have 1 external position
-        _setToken.initializeModule();
-        configs[_setToken] = Config (_router);
-
-        // TODO: tidy later
         address[] memory components = _setToken.getComponents();
-        // TODO: pass adapter to constructor
+        require(components.length > 1, "Index: not enough components");
+        _setToken.initializeModule();
+        Config memory config;
+        config.router = _router;
+        config.quote = _quote;
+        configs[_setToken] = config;
+       
         CompositeSetIssuanceModuleHook hook = new CompositeSetIssuanceModuleHook(controller, _quote, _router);
-        // TODO: add address of hook to a special allow list 
-        for(uint16 i=1; i < components.length; i++) {
+        for(uint16 i=0; i < components.length; i++) {
             _setToken.addExternalPositionModule(components[i], address(hook));
         }
     }
 
     /**
-     * MANAGER ONLY: Initializes this module to the SetToken with issuance-related hooks and fee information. Only callable
+     * MANAGER ONLY: Initializes the issuance-related hooks and fee information. Only callable
      * by the SetToken's manager. Hook addresses are optional. Address(0) means that no hook will be called
      *
      * @param _setToken                     Instance of the SetToken to issue
@@ -179,20 +224,11 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         onlySetManager(_setToken, msg.sender)
         onlyValidAndInitializedSet(_setToken)
     {
-        address[] memory components = _setToken.getComponents();
-        address externalModule;
-        for(uint16 i=1; i < components.length; i++) {
-            address[] memory externalModules = _setToken.getExternalPositionModules(components[i]);
-            require(externalModules.length == 1);
-            if (externalModule == address(0)) {
-                externalModule = externalModules[0];
-            }
-            require(externalModule == externalModules[0]);
-        }
+        address externalModule = _validateInitializableHook(_setToken);
         IModuleIssuanceHook(externalModule).initialize(_setToken);
     }
 
-    function getSome(ISetToken _setToken, uint256 _quantity, bool _isIssue) external view returns (address[] memory, uint256[] memory, uint256) {
+    function getSome(ISetToken _setToken, uint256 _quantity, bool _isIssue) external view returns (address[] memory, uint256[] memory) {
         return _calculateRequiredComponentIssuanceUnits(_setToken, _quantity, _isIssue);
     }
 
@@ -213,39 +249,47 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         bool _isIssue,
         address[] memory _components,
         uint256[] memory _componentEquityQuantities,
-        uint256 equityUnitsSum
+        uint256 _amountThreshold
     )
         internal
     {
+        // FIXME: working revision here
         if (_isIssue) {
             transferFrom(
-                IERC20(_components[0]),
+                configs[_setToken].quote,
                 msg.sender,
                 address(_setToken),
-                equityUnitsSum
+                _sumOf(_componentEquityQuantities)
             );
         }
+        uint256[] memory thresholds = _calculateSlippageAmounts(
+            _componentEquityQuantities, 
+            _amountThreshold,
+            _isIssue
+        );
         address component;
-        uint256 quoteComponentQuantity ;
         uint256 componentQuantity;
-        for (uint256 i = 1; i < _components.length; i++) {
+        for (uint256 i = 0; i < _components.length; i++) {
             component = _components[i];
-            quoteComponentQuantity = _componentEquityQuantities[i-1];
-            if (quoteComponentQuantity > 0) {
+            if (_componentEquityQuantities[i] > 0) {
                 componentQuantity  = _quantity.preciseMul(_setToken.getDefaultPositionRealUnit(component).toUint256());
-                componentQuantity = componentQuantity.preciseMul(IndexUtils.getUnitOf(component));
+                componentQuantity = componentQuantity.preciseMul(IndexUtils.getUnitOf(component));  // ether, btc, ...etc
                 _executeExternalPositionHooks(
                     _setToken,
-                    quoteComponentQuantity,
-                    componentQuantity, 
+                    thresholds[i],
+                    componentQuantity,        // Exact
                     IERC20(component), 
                     _isIssue
                 );
-                // _approveRouter(_setToken, _components[0], quoteComponentQuantity);
-                // uint256[] memory amounts = _swapToIndex(_setToken, component, componentQuantity, quoteComponentQuantity);
-
-                // require(amounts[1] == componentQuantity, "Composite: Undesired o/p swap");
             }
+        }
+        // TODO: move this too Hook
+        if(!_isIssue) {
+             _setToken.invokeTransfer(
+                 address(configs[_setToken].quote), 
+                 _to, 
+                _sumOf(_componentEquityQuantities)
+            );
         }
     }
 
@@ -269,33 +313,33 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     )
         internal
         view
-        returns (address[] memory, uint256[] memory, uint256 )
+        returns (address[] memory, uint256[] memory)
     {
         (
             address[] memory components,
             uint256[] memory equityUnits
         ) = _getTotalIssuanceUnits(_setToken);
 
+        address _quote = address(configs[_setToken].quote);
+
         uint256 componentsLength = components.length;
-        uint256[] memory totalEquityUnits = new uint256[](componentsLength-1);
+        uint256[] memory totalEquityUnits = new uint256[](componentsLength);
         address [] memory path = new address[](2);
-        uint256 sum;
-        for (uint256 i = 1; i < components.length; i++) {
+        for (uint256 i = 0; i < components.length; i++) {
             // Use preciseMulCeil to round up to ensure overcollateration when small issue quantities are provided
             // and preciseMul to round down to ensure overcollateration when small redeem quantities are provided
             uint256 totalUnits = _isIssue ?
                 equityUnits[i].preciseMulCeil(_quantity) :
                 equityUnits[i].preciseMul(_quantity);
-            path[0] = _isIssue? components[0]:components[i];
-            path[1] = _isIssue? components[i]:components[0];
+            path[0] = _isIssue? _quote:components[i];
+            path[1] = _isIssue? components[i]:_quote;
             
-            totalEquityUnits[i-1] = _isIssue?
-                configs[_setToken].router.getAmountsIn(totalUnits, path)[0]:
-                configs[_setToken].router.getAmountsOut(totalUnits, path)[1];
-            sum = sum.add(totalEquityUnits[i-1]);
+            totalEquityUnits[i] = _isIssue?
+                configs[_setToken].router.getAmountsIn(totalUnits.preciseMul(IndexUtils.getUnitOf(components[i])), path)[0]:
+                configs[_setToken].router.getAmountsOut(totalUnits.preciseMul(IndexUtils.getUnitOf(components[i])), path)[1];
         }
 
-        return (components, totalEquityUnits, sum);
+        return (components, totalEquityUnits );
     }
 
     /**
@@ -318,7 +362,7 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
 
         uint256[] memory equityUnits = new uint256[](componentsLength);
 
-        for (uint256 i = 1; i < components.length; i++) {
+        for (uint256 i = 0; i < components.length; i++) {
             address component = components[i];
             int256 cumulativeEquity = _setToken.getDefaultPositionRealUnit(component);
             equityUnits[i] = cumulativeEquity.toUint256();
@@ -351,30 +395,33 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     /* ============ Private Functions ============ */
-   /**
-     * Instructs the SetToken to set approvals of the ERC20 token to a spender.
-     *
-     * @param _setToken                      SetToken instance to invoke
-     * @param _component                     ERC20 component of Index / Output of swap
-     * @param _componentQuantity             Desired output quantity of component 
-     * @param _quoteComponentQuantityMax        Maximum allowed quantity of input of swap 
-     */
-    function _swapToIndex(
-        ISetToken _setToken,
-        address _component,
-        uint256 _componentQuantity,
-        uint256 _quoteComponentQuantityMax
+
+    function _validateAmountSlippage(
+        uint256[] memory equityQuantities,
+        uint256 amountOutMin
     )
     private
-    returns (uint256[] memory amounts)
+    pure
     {
-        IExchangeAdapterV3 adapter = IExchangeAdapterV3(getAndValidateAdapter("UNISWAP"));
-        amounts = _setToken.invokeSwapToIndex(
-            adapter, 
-            _component,
-            _componentQuantity, 
-            _quoteComponentQuantityMax 
-        );
+        require(_sumOf(equityQuantities) >= amountOutMin, "Index: Not enough amountOut");
+    }
+
+    function _validateInitializableHook(
+        ISetToken _setToken
+    )
+    private
+    view 
+    returns (address externalModule)
+    {
+        address[] memory components = _setToken.getComponents();
+        for(uint16 i=0; i < components.length; i++) {
+            address[] memory externalModules = _setToken.getExternalPositionModules(components[i]);
+            require(externalModules.length == 1, "Index: externalModules error");
+            if (externalModule == address(0)) {
+                externalModule = externalModules[0];
+            }
+            require(externalModule == externalModules[0], "Index: not same externalModule");
+        }
     }
 
    /**
@@ -413,6 +460,40 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     {
         bytes memory callData = abi.encodeWithSignature("approve(address,uint256)", _spender, _quantity);
         _setToken.invoke(_token, 0, callData);
+    }
+
+    function _sumOf(
+        uint256[] memory nums
+    )
+    private
+    pure
+    returns (uint256 total)
+    {
+        uint length = nums.length;
+        if(length == 0)  return 0;
+        for (uint i=0; i < length; i++) {
+            total = total.add(nums[i]);
+        }
+    }
+
+    function _calculateSlippageAmounts(
+        uint256[] memory _expectedAmounts,
+        uint256 _thresholdAmount,
+        bool _isIssue
+    )
+    public
+    pure
+    returns (uint256[] memory ) 
+    {
+        uint256 total = _sumOf(_expectedAmounts);
+        bool x = _isIssue? _thresholdAmount < total : total < _thresholdAmount;
+        if(x) return _expectedAmounts;
+
+        uint256[] memory _thresholdAmounts = new uint256[] (_expectedAmounts.length);
+        for(uint i=0; i < _expectedAmounts.length; i++) {
+            _thresholdAmounts[i] = _thresholdAmount.mul(_expectedAmounts[i]).div(total);
+        }
+        return _thresholdAmounts;
     }
 }
 
