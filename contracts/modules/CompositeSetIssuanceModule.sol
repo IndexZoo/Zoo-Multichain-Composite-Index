@@ -1,5 +1,5 @@
 /*
-    Copyright 2021 Set Labs Inc.
+    Copyright 2022 IndexTech Ltd.
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@
 */
 
 // DONE: implement calculation ()
-// TODO: This module added to a set as one of a kind (if it requires asset storing)
-// TODO: This module should not be removed if it stores assets
 // TODO: This module is added to a set with no minted tokens only
 
 pragma solidity 0.6.10;
@@ -228,10 +226,6 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         IModuleIssuanceHook(externalModule).initialize(_setToken);
     }
 
-    function getSome(ISetToken _setToken, uint256 _quantity, bool _isIssue) external view returns (address[] memory, uint256[] memory) {
-        return _calculateRequiredComponentIssuanceUnits(_setToken, _quantity, _isIssue);
-    }
-
     function removeModule() external override {}
 
     /* ============ Internal Functions ============ */
@@ -253,7 +247,6 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     )
         internal
     {
-        // FIXME: working revision here
         if (_isIssue) {
             transferFrom(
                 configs[_setToken].quote,
@@ -272,7 +265,7 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         for (uint256 i = 0; i < _components.length; i++) {
             component = _components[i];
             if (_componentEquityQuantities[i] > 0) {
-                componentQuantity  = _quantity.preciseMul(_setToken.getDefaultPositionRealUnit(component).toUint256());
+                componentQuantity = _quantity.preciseMul(_setToken.getDefaultPositionRealUnit(component).toUint256());
                 componentQuantity = componentQuantity.preciseMul(IndexUtils.getUnitOf(component));  // ether, btc, ...etc
                 _executeExternalPositionHooks(
                     _setToken,
@@ -283,7 +276,7 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
                 );
             }
         }
-        // TODO: move this too Hook
+        // TODO: move this to Hook
         if(!_isIssue) {
              _setToken.invokeTransfer(
                  address(configs[_setToken].quote), 

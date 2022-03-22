@@ -42,10 +42,5 @@ describe("Testing Ecosystem", function () {
     it("router -- xx ", async function () {
       console.log((await ctx.subjectModule!.configs(ctx.sets[0].address))) ;
     });
-    it("getIssuanceUnits -- xx ", async function () {
-      console.log(await ctx.subjectModule!.getSome(ctx.sets[0].address, ether(10), true)) ;
-    });
-    it.only("", async function (){
-      console.log(await ctx.subjectModule!._getDecimalsOf(ctx.tokens.btc.address));
-    });
+
 });

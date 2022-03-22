@@ -1,5 +1,5 @@
 /*
-    Copyright 2021 Set Labs Inc.
+    Copyright 2022 IndexTech Ltd.
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import { ResourceIdentifier } from "@setprotocol/set-protocol-v2/contracts/proto
 import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
 import { IExchangeAdapterV3} from "../interfaces/IExchangeAdapterV3.sol";
 import { IndexUtils } from "../lib/IndexUtils.sol";
+import "hardhat/console.sol";
 
 contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     using Invoke for ISetToken;
@@ -69,6 +70,7 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     onlyOwner 
     {
         _approveRouter(_setToken, address(quote), _quoteQuantityMax);
+        // swapToExact > index amount = componentQuantity
         uint256[] memory amounts = _swapToIndex(_setToken, address(_component), _componentQuantity, _quoteQuantityMax);
     }
 
@@ -85,11 +87,6 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     {
         _approveRouter(_setToken, address(_component), _componentQuantity);
         uint256[] memory amounts = _swapToQuote(_setToken, address(_component), _componentQuantity, _quoteQuantityMin);
-
-        // Send the component to the settoken
-        // int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this));
-        // uint256 totalNotionalExternalModule = _setTokenQuantity.preciseMul(externalPositionUnit.toUint256());
-        // _component.transfer(address(_setToken), totalNotionalExternalModule);
     }
 
 
