@@ -12,6 +12,8 @@ import { Account } from "@utils/types";
 import { MAX_INT_256 } from "../utils/constants";
 import { StandardTokenMock } from "@typechain/StandardTokenMock";
 import { BalanceTracker } from "./BalanceTracker";
+
+import {initUniswapRouter} from "./context";
 chai.use(solidity);
 chai.use(approx);
 
@@ -41,6 +43,12 @@ describe("Testing Ecosystem", function () {
 
     it("router -- xx ", async function () {
       console.log((await ctx.subjectModule!.configs(ctx.sets[0].address))) ;
+    });
+
+    it.only("real router", async function() {
+      let router = await initUniswapRouter(ctx.accounts.owner, ctx.tokens.weth, ctx.tokens.dai, ctx.tokens.btc);
+      let amounts = await router.getAmountsOut(ether(1), [ctx.tokens.weth.address, ctx.tokens.dai.address]);
+      console.log(amounts);
     });
 
 });

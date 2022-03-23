@@ -19,6 +19,10 @@ import { CompositeSetIssuanceModule } from "../typechain-types/CompositeSetIssua
 import { abi as SetTokenABI } from "../artifacts/@setprotocol/set-protocol-v2/contracts/protocol/SetToken.sol/SetToken.json";
 import { IntegrationRegistry } from "@typechain/IntegrationRegistry";
 import { UniswapV2ExchangeAdapterV3 } from "@typechain/UniswapV2ExchangeAdapterV3";
+// @ts-ignore
+import { getUniswapFixture } from "@setprotocol/set-protocol-v2/dist/utils/test";
+import { UniswapV2Router02 } from "@setprotocol/set-protocol-v2/typechain/UniswapV2Router02";
+
 
 
 const pMul = (b: BigNumber, x: number) => {
@@ -38,6 +42,25 @@ const initUniswapMockRouter = async(owner: Account, weth:  Contract, dai:  Stand
       await router.addLiquidity(weth.address, dai.address, ether(50), ether(50000), ether(49), ether(49900), owner.address, MAX_UINT_256);
       await router.addLiquidity(btc.address, dai.address, bitcoin(50), ether(500000), bitcoin(49), ether(499900), owner.address, MAX_UINT_256);
     
+      return router;
+}
+
+const initUniswapRouter = async(owner: Account, weth:  Contract, dai:  StandardTokenMock, btc: StandardTokenMock): Promise<UniswapV2Router02> => {
+      let router: UniswapV2Router02;
+
+         let uniswapFixture =  getUniswapFixture(owner.address);
+        await uniswapFixture.initialize(
+          owner,
+          weth.address,
+          btc.address,
+          dai.address
+        );
+        router = uniswapFixture.router;
+      await  weth.approve(router.address, MAX_UINT_256);
+      await dai.approve(router.address, MAX_UINT_256);
+      await btc.approve(router.address, MAX_UINT_256);
+      await router.addLiquidity(weth.address, dai.address, ether(400), ether(400000), ether(390), ether(399000), owner.address, MAX_UINT_256);
+      await router.addLiquidity(btc.address, dai.address, bitcoin(40), ether(400000), ether(39), ether(399000), owner.address, MAX_UINT_256);
       return router;
 }
 
@@ -73,14 +96,14 @@ class Context {
   public sets: SetToken[] = [];
   public subjectModule?: CompositeSetIssuanceModule;
 
-  public mockRouter?: UniswapV2Router02Mock;
-  public mockRouterAdapter?: UniswapV2ExchangeAdapterV3;
+  public router?: UniswapV2Router02Mock | UniswapV2Router02;
+  public exchangeAdapter?: UniswapV2ExchangeAdapterV3;
 
   public async setUniswapIntegration(): Promise<void> {
     await this.ct.integrator.addIntegration(
       this.subjectModule!.address,
       UNISWAP_ADAPTER_NAME,
-      this.mockRouterAdapter!.address
+      this.exchangeAdapter!.address
     )
   }
 
@@ -103,7 +126,7 @@ class Context {
       this.sets.push(deployedSetToken );
 
 
-      await this.subjectModule!.initialize(deployedSetToken.address, this.tokens.dai.address,  this.mockRouter!.address);
+      await this.subjectModule!.initialize(deployedSetToken.address, this.tokens.dai.address,  this.router!.address);
 
       // addToController
       let component = (await deployedSetToken.getComponents())[0];
@@ -114,7 +137,7 @@ class Context {
       await this.ct.integrator.addIntegration(
         externalModule, 
         UNISWAP_ADAPTER_NAME, 
-        this.mockRouterAdapter!.address
+        this.exchangeAdapter!.address
       );
 
       // initializeHook
@@ -124,7 +147,7 @@ class Context {
   }
 
 
-    public async initialize() : Promise<void>  {
+    public async initialize(isMockDex: boolean = true) : Promise<void>  {
     [
       this.accounts.owner,
       this.accounts.protocolFeeRecipient,
@@ -142,11 +165,13 @@ class Context {
       this.tokens.btc = await (await ethers.getContractFactory("StandardTokenMock")).deploy(this.accounts.owner.address, bitcoin(1000000), "MockBtc", "MBTC", 8);
       this.tokens.weth = await new WETH9__factory(this.accounts.owner.wallet).deploy();
 
-      await this.tokens.weth.connect(this.accounts.bob.wallet).deposit({value: ether(100)});
-      await this.tokens.weth.deposit({value: ether(100)});
+      await this.tokens.weth.connect(this.accounts.bob.wallet).deposit({value: ether(1000)});
+      await this.tokens.weth.deposit({value: ether(1000)});
       await this.tokens.dai.transfer(this.accounts.bob.address, ether(2000));
       
-      this.mockRouter = await initUniswapMockRouter(this.accounts.owner, this.tokens.weth, this.tokens.dai, this.tokens.btc);      
+      this.router = isMockDex? 
+         await initUniswapMockRouter(this.accounts.owner, this.tokens.weth, this.tokens.dai, this.tokens.btc):
+         await initUniswapRouter(this.accounts.owner, this.tokens.weth, this.tokens.dai, this.tokens.btc);      
       /* ============================================= Zoo Ecosystem ==============================================================*/
       this.ct.controller =  await (await ethers.getContractFactory("Controller")).deploy(
         this.accounts.protocolFeeRecipient.address
@@ -169,8 +194,8 @@ class Context {
         [INTEGRATION_REGISTRY_RESOURCE_ID]
       );
 
-      this.mockRouterAdapter  = await (await ethers.getContractFactory("UniswapV2ExchangeAdapterV3")).deploy(
-        this.mockRouter!.address 
+      this.exchangeAdapter = await (await ethers.getContractFactory("UniswapV2ExchangeAdapterV3")).deploy(
+        this.router!.address 
       );
       await this.setUniswapIntegration();
       await this.createSetToken();
@@ -181,5 +206,6 @@ class Context {
 export {
   Context, 
   initUniswapMockRouter, 
+  initUniswapRouter,
   pMul,
 };
