@@ -30,6 +30,8 @@ chai.use(approx);
 // TODO: do document contracts
 // DONE: Implement Redeem
 // TODO: Test Multiple issue and redeem
+// TODO: TODO: work with multiplier when multiplier in setToken =0.5
+// TODO: Investigate when Multiplier is beneath Zero
 // DONE: Test real uniswap
 //  -- DONE: Embed real uniswap in elegant way
 
@@ -184,6 +186,39 @@ describe("Composite IssuanceModule ", function () {
           quantity.div(2),
           bob.address,
           daiIn.div(2).mul(95).div(100) 
+        );
+        await daiTracker.push(bob.address);
+        expect(daiTracker.totalSpent(bob.address)).to.be.gt(daiIn.div(2));  // due to uniswap fees
+        expect(daiTracker.totalSpent(bob.address)).to.be.approx(daiIn.div(2));
+      });
+
+
+      it.skip("Redeem amount of 0.5 index", async function () {
+        // FIXME: do that test in streamingFeeModule tests
+        /**
+         * Assumes setToken corrupted by positionMultiplier initially = 0.5
+         * Bob issues 2 dai worth of index ~ 0.01 index
+         * Bob redeems 0.005 index ~ 1 dai
+         * Bob expected to have spent about 1 dai overall (i.e. spent 2 then gained 1)
+         * Bob is expected though to have spent little more than 1 dai (i.e. uniswap fees)
+         */
+        
+        let daiIn = ether(2).div(2);    // amount of dai per index due to inflation multiplier = 0.5
+        let quantity = ether(0.01);
+        await ctx.tokens.dai.connect(bob.wallet).approve(ctx.subjectModule!.address, MAX_INT_256);
+        await daiTracker.push(bob.address);
+        await ctx.subjectModule!.connect(ctx.accounts.bob.wallet).issue(
+          setToken.address,
+          quantity,
+          ctx.accounts.bob.address,
+          ether(2.04).div(2)
+        );
+        await daiTracker.push(bob.address);
+        await  ctx.subjectModule!.connect(bob.wallet).redeem(
+          setToken.address,
+          quantity.div(2),
+          bob.address,
+          daiIn.div(2).mul(90).div(100) 
         );
         await daiTracker.push(bob.address);
         expect(daiTracker.totalSpent(bob.address)).to.be.gt(daiIn.div(2));  // due to uniswap fees

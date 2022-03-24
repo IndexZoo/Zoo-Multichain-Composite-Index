@@ -265,6 +265,7 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         for (uint256 i = 0; i < _components.length; i++) {
             component = _components[i];
             if (_componentEquityQuantities[i] > 0) {
+                // TODO: do calcs in separate function to account for preciseMulCeil
                 componentQuantity = _quantity.preciseMul(_setToken.getDefaultPositionRealUnit(component).toUint256());
                 componentQuantity = componentQuantity.preciseMul(IndexUtils.getUnitOf(component));  // ether, btc, ...etc
                 _executeExternalPositionHooks(
