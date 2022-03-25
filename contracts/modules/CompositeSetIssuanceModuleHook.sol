@@ -51,6 +51,11 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
         router = _router;
     }
 
+    /**
+     * MANAGER ONLY: Initializes this module to the SetToken with desired configuration. 
+     * Only called by CompositeSetIssuanceModule
+     * @param _setToken         Instance of the SetToken to issue
+     */
     function initialize(ISetToken _setToken) external override onlyOwner {
         _setToken.initializeModule();
     }
@@ -58,6 +63,13 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     function moduleIssueHook(ISetToken _setToken, uint256 _setTokenQuantity) external override {}
     function moduleRedeemHook(ISetToken _setToken, uint256 _setTokenQuantity) external override {}
 
+    /**
+     * Triggers the process of swapping quote for component. Only called by CompositeSetIssuanceModule.
+     * @param _setToken                 Instance of the SetToken to issue
+     * @param _quoteQuantityMax         Max Quantity of quote to swap
+     * @param _componentQuantity        Component quantity to be output of swap 
+     * @param _component                Address of component asset 
+     */
     function componentIssueHook(
         ISetToken _setToken,
         uint256 _quoteQuantityMax,
@@ -74,6 +86,13 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
         uint256[] memory amounts = _swapToIndex(_setToken, address(_component), _componentQuantity, _quoteQuantityMax);
     }
 
+    /**
+     * Triggers the process of swapping component for quote. Only called by CompositeSetIssuanceModule.
+     * @param _setToken                 Instance of the SetToken to issue
+     * @param _quoteQuantityMin         Min Quantity of quote to be output of swap
+     * @param _componentQuantity        Component quantity to be input of swap 
+     * @param _component                Address of component asset 
+     */
     function componentRedeemHook(
         ISetToken _setToken,
         uint256 _quoteQuantityMin,
@@ -94,7 +113,7 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     /* ============================= Private Functions ==================================== */
 
    /**
-     * Instructs the SetToken to set approvals of the ERC20 token to a spender.
+     * Instructs the SetToken to set approvals of the ERC20 token to a uniswap-like router.
      *
      * @param _setToken        ZooToken instance to invoke
      * @param _token           ERC20 token to approve
@@ -133,12 +152,12 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     /* ============ Private Functions ============ */
 
    /**
-     * Instructs the SetToken to set approvals of the ERC20 token to a spender.
+     * Swaps input exact quantity of component to corresponding amount of quote.
      *
      * @param _setToken                      SetToken instance to invoke
-     * @param _component                     ERC20 component of Index / Output of swap
-     * @param _componentQuantity             Desired output quantity of component 
-     * @param _quoteComponentQuantityMin     Minimum allowed quantity of input of swap 
+     * @param _component                     ERC20 component of index / input of swap
+     * @param _componentQuantity             Desired input swap quantity of component 
+     * @param _quoteComponentQuantityMin     Minimum allowed quantity of output of swap 
      */
     function _swapToQuote(
         ISetToken _setToken,
@@ -160,11 +179,11 @@ contract CompositeSetIssuanceModuleHook is IModuleIssuanceHook, Ownable {
     }
 
    /**
-     * Instructs the SetToken to set approvals of the ERC20 token to a spender.
+     * Swaps input amount of quote to exact quantity of component .
      *
-     * @param _setToken                      SetToken instance to invoke
-     * @param _component                     ERC20 component of Index / Output of swap
-     * @param _componentQuantity             Desired output quantity of component 
+     * @param _setToken                         SetToken instance to invoke
+     * @param _component                        ERC20 component of Index / Output of swap
+     * @param _componentQuantity                Desired output quantity of component 
      * @param _quoteComponentQuantityMax        Maximum allowed quantity of input of swap 
      */
     function _swapToIndex(

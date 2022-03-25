@@ -13,6 +13,7 @@ import { UniswapV2Router02Mock } from "../typechain-types/UniswapV2Router02Mock"
 import { Controller } from "../typechain-types/Controller";
 import { SetToken } from "../typechain-types/SetToken";
 import { SetTokenCreator } from "../typechain-types/SetTokenCreator";
+import { StreamingFeeModule } from "../typechain-types/StreamingFeeModule";
 import { getAccounts } from "../utils/common/accountUtils";
 import { WETH9__factory } from "../typechain-types/factories/WETH9__factory";
 import { CompositeSetIssuanceModule } from "../typechain-types/CompositeSetIssuanceModule";
@@ -85,6 +86,7 @@ interface Contracts {
   controller: Controller;
   zooToken: SetToken;
   creator: SetTokenCreator;
+  streamingFee: StreamingFeeModule;
   integrator: IntegrationRegistry;
 }
 
@@ -114,7 +116,10 @@ class Context {
       const tx =  await this.ct.creator.create(
         [this.tokens.weth.address, this.tokens.btc.address ],
         [ether(0.1), ether(0.01) ],
-        [this.subjectModule!.address], 
+        [
+          this.subjectModule!.address, 
+          this.ct.streamingFee.address
+        ], 
         this.accounts.owner.address, 
         "Compo", 
         "BULL"
@@ -122,11 +127,19 @@ class Context {
       const receipt = await tx.wait();
       const event = receipt.events?.find(p => p.event == "SetTokenCreated");
       const tokensetAddress = event? event.args? event.args[0]:"":"";
+
       let deployedSetToken =  await ethers.getContractAt(SetTokenABI, tokensetAddress) as SetToken;
       this.sets.push(deployedSetToken );
 
 
       await this.subjectModule!.initialize(deployedSetToken.address, this.tokens.dai.address,  this.router!.address);
+      await this.ct.streamingFee.initialize(
+        deployedSetToken.address, {
+         feeRecipient: this.accounts.protocolFeeRecipient.address,
+         maxStreamingFeePercentage: ether(0.05),
+         streamingFeePercentage: ether(0.01),
+         lastStreamingFeeTimestamp: 0
+      });
 
       // addToController
       let component = (await deployedSetToken.getComponents())[0];
@@ -182,13 +195,17 @@ class Context {
       this.subjectModule = await (await ethers.getContractFactory("CompositeSetIssuanceModule")).deploy(
         this.ct.controller.address
       );
+      this.ct.streamingFee = await (await ethers.getContractFactory("StreamingFeeModule")).deploy(
+        this.ct.controller.address
+      );
       this.ct.integrator = await (await ethers.getContractFactory("IntegrationRegistry"))
         .deploy(this.ct.controller.address);
 
       await this.ct.controller.initialize(
         [this.ct.creator.address],
         [
-          this.subjectModule.address, 
+          this.subjectModule.address,
+          this.ct.streamingFee.address 
         ],
         [this.ct.integrator.address],
         [INTEGRATION_REGISTRY_RESOURCE_ID]

@@ -16,9 +16,6 @@
     SPDX-License-Identifier: Apache License, Version 2.0
 */
 
-// DONE: implement calculation ()
-// TODO: This module is added to a set with no minted tokens only
-
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
@@ -42,22 +39,23 @@ import "hardhat/console.sol";
  * @title CompositeSetIssuanceModule
  * @author IndexZoo 
  *
- * The DebtIssuanceModuleV2 is a module that enables users to issue and redeem SetTokens that contain default and all
- * external positions, including debt positions. Module hooks are added to allow for syncing of positions, and component
- * level hooks are added to ensure positions are replicated correctly. The manager can define arbitrary issuance logic
- * in the manager hook, as well as specify issue and redeem fees.
+ * The CompositeSetIssuanceModule is a module that enables users to issue and redeem SetTokens that represent an
+ * underlying collateral of tokens (i.e index). 
+ * These tokens provides the value for the set.
+ * Users issue the index by providing a predetermined quote currency, typically a stable coin (i.e. dai).
+ * Input quote is exchanged via uniswap-like protocol to the components of the index according the ratios determined 
+ * by the positionUnits of the SetToken linked with this module.
+ * Users redeem the index by burning quantity of the issued index and receive the underlying assets according
+ * to the prementioned ratios.
+ * Module hooks are added to allow for syncing of positions.
  * 
  * NOTE: 
- * DebtIssuanceModule contract confirms increase/decrease in balance of component held by the SetToken after every transfer in/out
- * for each component during issuance/redemption. This contract replaces those strict checks with slightly looser checks which 
- * ensure that the SetToken remains collateralized after every transfer in/out for each component during issuance/redemption.
- * This module should be used to issue/redeem SetToken whose one or more components return a balance value with +/-1 wei error.
- * For example, this module can be used to issue/redeem SetTokens which has one or more aTokens as its components.
- * The new checks do NOT apply to any transfers that are part of an external position. A token that has rounding issues may lead to 
- * reverts if it is included as an external position unless explicitly allowed in a module hook.
- *
- * The getRequiredComponentIssuanceUnits function on this module assumes that Default token balances will be synced on every issuance
- * and redemption. If token balances are not being synced it will over-estimate the amount of tokens required to issue a Set.
+ * CompositeSetIssuanceModule contract should confirm increase/decrease in balance of component held by the SetToken after every transfer in/out
+ * for each component during issuance/redemption. 
+ * In issue: Precalculation of input quote amount is estimated before actually minting index and receiving the 
+ * underlying collateral.
+ * In redeem: Precalculation of output quot amount is estimated before actually burning index quantity and sending 
+ * underlying collateral to redeemer.
  */
 contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     using IndexUtils for ISetToken;
@@ -76,21 +74,22 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         ISetToken indexed _setToken,
         address indexed _issuer,
         address indexed _to,
-        uint256 _quantity
+        uint256 _quantity                       // Quantity of SetToken to be Issued
     );
 
     event SetTokenRedeemed(
         ISetToken indexed _setToken,
         address indexed _redeemer,
         address indexed _to,
-        uint256 _quantity
+        uint256 _quantity                       // Quantity of SetToken to be Redeemed
     );
 
     /* ==================== State Variables ========================== */
     /**
-     * Config configuration for module
-     * configuration for a selected token 
-     * router i.e. Uniswap
+     * Config configuration by module
+     * configuration for a given token 
+     * each token can have its own configuration
+     * router e.g. uniswapRouter / quote e.g. dai
      */
     mapping(ISetToken=> Config) public configs;
     
@@ -101,13 +100,13 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ============ External Functions ============ */
 
     /**
-     * Deposits components to the SetToken, replicates any external module component positions and mints 
-     * the SetToken. If the token has a debt position all collateral will be transferred in first then debt
-     * will be returned to the minting address. If specified, a fee will be charged on issuance.
+     * Request minting a quantity of the SetToken paid for by quote. Quote pays for the components of SetToken 
+     * by swapping it. Slippage is added to arguments to prevent sandwich attacks. 
      *
      * @param _setToken         Instance of the SetToken to issue
      * @param _quantity         Quantity of SetToken to issue
      * @param _to               Address to mint SetToken to
+     * @param _maxAmountIn      Slippage: max amount of quote to be tranferred for issuing
      */
     function issue(
         ISetToken _setToken,
@@ -141,19 +140,18 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
 
     /**
      * Returns components from the SetToken, unwinds any external module component positions and burns the SetToken.
-     * If the token has debt positions, the module transfers in the required debt amounts from the caller and uses
-     * those funds to repay the debts on behalf of the SetToken. All debt will be paid down first then equity positions
-     * will be returned to the minting address. If specified, a fee will be charged on redeem.
+     * Component positions are redeemed in the form of the quote token configured.
      *
-     * @param _setToken         Instance of the SetToken to redeem
-     * @param _quantity         Quantity of SetToken to redeem
-     * @param _to               Address to send collateral to
+     * @param _setToken                  Instance of the SetToken to redeem
+     * @param _quantity                  Quantity of SetToken to redeem then burn
+     * @param _to                        Address to send redeemed funds to
+     * @param _minAmountRedeemed         Minimum amount of quote asset to be sent back in exchange of components
      */
     function redeem(
         ISetToken _setToken,
         uint256 _quantity,
         address _to,
-        uint256 _mintAmountRedeemed
+        uint256 _minAmountRedeemed
     )
         external
         virtual        
@@ -161,6 +159,7 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         onlyValidAndInitializedSet(_setToken)
     {
         require(_quantity > 0, "Redeem quantity must be > 0");
+        // TODO: ensure quantity is less than balance then test scenario
 
         // Place burn after pre-redeem hooks because burning tokens may lead to false accounting of synced positions
         _setToken.burn(msg.sender, _quantity);
@@ -169,8 +168,8 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
             address[] memory components,
             uint256[] memory equityUnits
         ) = _calculateRequiredComponentIssuanceUnits(_setToken, _quantity, false);
-        _validateAmountSlippage(equityUnits, _mintAmountRedeemed);
-        _resolveEquityPositions(_setToken, _quantity, _to, false, components, equityUnits, _mintAmountRedeemed);
+        _validateAmountSlippage(equityUnits, _minAmountRedeemed);
+        _resolveEquityPositions(_setToken, _quantity, _to, false, components, equityUnits, _minAmountRedeemed);
 
         emit SetTokenRedeemed(
             _setToken,
@@ -181,10 +180,12 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * MANAGER ONLY: Initializes this module to the SetToken with issuance-related hooks and fee information. Only callable
-     * by the SetToken's manager. Hook addresses are optional. Address(0) means that no hook will be called
+     * MANAGER ONLY: Initializes this module to the SetToken with desired configuration. Issuance-related 
+     * hooks are also deployed during initialization. Only callable by the SetToken's manager. 
      *
      * @param _setToken                     Instance of the SetToken to issue
+     * @param _quote                        Address of quote asset
+     * @param _router                       Address of uniswap-like swap router
      */
     function initialize(
         ISetToken _setToken,
@@ -210,8 +211,8 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * MANAGER ONLY: Initializes the issuance-related hooks and fee information. Only callable
-     * by the SetToken's manager. Hook addresses are optional. Address(0) means that no hook will be called
+     * MANAGER ONLY: Initializes the issuance-related hooks priorly deployed by initialize(). Only callable
+     * by the SetToken's manager. 
      *
      * @param _setToken                     Instance of the SetToken to issue
      */
@@ -231,10 +232,10 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ============ Internal Functions ============ */
 
     /**
-     * Resolve equity positions associated with SetToken. On issuance, the total equity position for an asset (including default and external
-     * positions) is transferred in. Then any external position hooks are called to transfer the external positions to their necessary place.
-     * On redemption all external positions are recalled by the external position hook, then those position plus any default position are
-     * transferred back to the _to address.
+     * Resolve equity positions associated with SetToken. On issuance, the total equity position (in quote) for an asset (including default and external
+     * positions) is transferred in. Then any external position hooks are called to execute the swapping operations.
+     * On redemption all external positions are recalled by the external position hook, then those positions (in quote) are transferred back
+     * to the _to address.
      */
     function _resolveEquityPositions(
         ISetToken _setToken,
@@ -277,7 +278,6 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
                 );
             }
         }
-        // TODO: move this to Hook
         if(!_isIssue) {
              _setToken.invokeTransfer(
                  address(configs[_setToken].quote), 
@@ -289,16 +289,15 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
 
 
     /**
-     * Calculates the amount of each component needed to collateralize passed issue quantity of Sets as well as amount of debt that will
-     * be returned to caller. Can also be used to determine how much collateral will be returned on redemption as well as how much debt
-     * needs to be paid down to redeem.
-     *
+     * Calculates the amount of each component needed to collateralize passed issue quantity of Sets. 
+     * Can also be used to determine how much collateral will be returned on redemption.     
      * @param _setToken         Instance of the SetToken to issue
      * @param _quantity         Amount of Sets to be issued/redeemed
      * @param _isIssue          Whether Sets are being issued or redeemed
      *
      * @return address[]        Array of component addresses making up the Set
-     * @return uint256[]        Array of equity notional amounts of each component, respectively, represented as uint256
+     * @return uint256[]        Array of equity amounts of each component in the value of quote, 
+     * respectively, represented as uint256. This is the amount which the function aims to calculate
      */
     function _calculateRequiredComponentIssuanceUnits(
         ISetToken _setToken,
@@ -337,12 +336,12 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Sums total debt and equity units for each component, taking into account default and external positions.
+     * Total equity units for each component, taking into account default positions.
      *
      * @param _setToken         Instance of the SetToken to issue
      *
      * @return address[]        Array of component addresses making up the Set
-     * @return uint256[]        Array of equity unit amounts of each component, respectively, represented as uint256
+     * @return uint256[]        Array of equity unit amounts in quote of each component, respectively, represented as uint256
      */
     function _getTotalIssuanceUnits(
         ISetToken _setToken
@@ -366,7 +365,7 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * For each component's external module positions, calculate the total notional quantity, and 
+     * For each component's external module positions, calculate the total quote quantity, and 
      * call the module's issue hook or redeem hook.
      * Note: It is possible that these hooks can cause the states of other modules to change.
      * It can be problematic if the hook called an external function that called back into a module, resulting in state inconsistencies.

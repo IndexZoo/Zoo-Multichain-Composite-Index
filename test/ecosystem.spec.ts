@@ -18,7 +18,7 @@ chai.use(solidity);
 chai.use(approx);
 
 
-describe("Testing Ecosystem", function () {
+describe.skip("Testing Ecosystem", function () {
   let ctx: Context;
   let bob: Account;
   let dai: StandardTokenMock;
@@ -45,7 +45,7 @@ describe("Testing Ecosystem", function () {
       console.log((await ctx.subjectModule!.configs(ctx.sets[0].address))) ;
     });
 
-    it.only("real router", async function() {
+    it("real router", async function() {
       let router = await initUniswapRouter(ctx.accounts.owner, ctx.tokens.weth, ctx.tokens.dai, ctx.tokens.btc);
       let amounts = await router.getAmountsOut(ether(1), [ctx.tokens.weth.address, ctx.tokens.dai.address]);
       console.log(amounts);
