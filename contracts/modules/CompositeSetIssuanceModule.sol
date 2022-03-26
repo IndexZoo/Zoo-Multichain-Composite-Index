@@ -143,7 +143,8 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
      * Component positions are redeemed in the form of the quote token configured.
      *
      * @param _setToken                  Instance of the SetToken to redeem
-     * @param _quantity                  Quantity of SetToken to redeem then burn
+     * @param _quantity                  Quantity of SetToken to redeem then burn, if quantity is MAX_UINT
+     * then it means redeem all balance of user
      * @param _to                        Address to send redeemed funds to
      * @param _minAmountRedeemed         Minimum amount of quote asset to be sent back in exchange of components
      */
@@ -158,9 +159,12 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         nonReentrant
         onlyValidAndInitializedSet(_setToken)
     {
-        require(_quantity > 0, "Redeem quantity must be > 0");
-        // TODO: ensure quantity is less than balance then test scenario
+        // redeem all amount
+        if(_quantity == uint256(-1))  _quantity = _setToken.balanceOf(msg.sender);
 
+        require(_quantity > 0, "Redeem quantity must be > 0");
+        require(_quantity <= _setToken.balanceOf(msg.sender), "Not enough index");
+        
         // Place burn after pre-redeem hooks because burning tokens may lead to false accounting of synced positions
         _setToken.burn(msg.sender, _quantity);
 
@@ -266,7 +270,6 @@ contract CompositeSetIssuanceModule is ModuleBase, ReentrancyGuard {
         for (uint256 i = 0; i < _components.length; i++) {
             component = _components[i];
             if (_componentEquityQuantities[i] > 0) {
-                // TODO: do calcs in separate function to account for preciseMulCeil
                 componentQuantity = _quantity.preciseMul(_setToken.getDefaultPositionRealUnit(component).toUint256());
                 componentQuantity = componentQuantity.preciseMul(IndexUtils.getUnitOf(component));  // ether, btc, ...etc
                 _executeExternalPositionHooks(

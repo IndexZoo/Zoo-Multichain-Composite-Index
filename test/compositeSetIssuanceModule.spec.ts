@@ -24,9 +24,6 @@ import { SetToken } from "@typechain/SetToken";
 chai.use(solidity);
 chai.use(approx);
 
-// TODO: test with polygon fork
-// TODO: Investigate when Multiplier is beneath Zero
-
 const advanceTime = async (duration: number): Promise<void> => {
   await ethers.provider.send('evm_increaseTime', [duration*3600*24*365.25]); // duration in years 
 }
@@ -188,6 +185,66 @@ describe("Composite IssuanceModule ", function () {
         await daiTracker.push(bob.address);
         expect(daiTracker.totalSpent(bob.address)).to.be.gt(daiIn.div(2));  // due to uniswap fees
         expect(daiTracker.totalSpent(bob.address)).to.be.approx(daiIn.div(2));
+      });
+
+      it("Redeem all amount of index", async function () {
+        /**
+         * Bob issues 2 dai worth of index ~ 0.01 index
+         * Bob redeems all index by using MAX_UINT_256 as quantity ~ 2 dai
+         * Bob expected to have spent about 0 dai overall 
+         * Bob is expected though to have spent little dai (i.e. gone as uniswap fees)
+         */
+        
+        let daiIn = ether(2);    // amount of dai per index
+        let quantity = ether(0.01);
+        await ctx.tokens.dai.connect(bob.wallet).approve(ctx.subjectModule!.address, MAX_INT_256);
+        await daiTracker.push(bob.address);
+        await ctx.subjectModule!.connect(ctx.accounts.bob.wallet).issue(
+          setToken.address,
+          quantity,
+          ctx.accounts.bob.address,
+          preciseMul(quantity, ether(204))
+        );
+        await daiTracker.push(bob.address);
+        await  ctx.subjectModule!.connect(bob.wallet).redeem(
+          setToken.address,
+          MAX_UINT_256,
+          bob.address,
+          daiIn.mul(95).div(100) 
+        );
+        await daiTracker.push(bob.address);
+        expect(daiTracker.totalSpent(bob.address)).to.be.gt(ether(0));  // due to uniswap fees
+        expect(daiTracker.totalSpent(bob.address)).to.be.lt(ether(0.02));
+
+        let expectedSwapFees = daiIn.mul(6).div(1000);                    // expected fees from the two swaps
+        expect(daiTracker.totalSpent(bob.address)).to.be.approx(expectedSwapFees);
+      });
+
+      it("Redeem amount of index more than actual balance", async function () {
+        /**
+         * Bob issues 2 dai worth of index ~ 0.01 index
+         * Bob redeems more index than he actually has
+         * Revert expected
+         */
+        
+        let daiIn = ether(2);    // amount of dai per index
+        let quantity = ether(0.01);
+        await ctx.tokens.dai.connect(bob.wallet).approve(ctx.subjectModule!.address, MAX_INT_256);
+        await daiTracker.push(bob.address);
+        await ctx.subjectModule!.connect(ctx.accounts.bob.wallet).issue(
+          setToken.address,
+          quantity,
+          ctx.accounts.bob.address,
+          preciseMul(quantity, ether(204))
+        );
+        await daiTracker.push(bob.address);
+        let tx = () =>  ctx.subjectModule!.connect(bob.wallet).redeem(
+          setToken.address,
+          quantity.add(1),
+          bob.address,
+          daiIn.mul(95).div(100) 
+        );
+        await expect( tx()).to.be.revertedWith("Not enough index");
       });
     });
 

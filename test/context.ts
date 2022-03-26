@@ -40,7 +40,7 @@ const initUniswapMockRouter = async(owner: Account, weth:  Contract, dai:  Stand
       await dai.approve(router.address, MAX_UINT_256);
       await btc.approve(router.address, MAX_UINT_256);
 
-      await router.addLiquidity(weth.address, dai.address, ether(50), ether(50000), ether(49), ether(49900), owner.address, MAX_UINT_256);
+      await router.addLiquidity(weth.address, dai.address, ether(80), ether(80000), ether(79), ether(79900), owner.address, MAX_UINT_256);
       await router.addLiquidity(btc.address, dai.address, bitcoin(50), ether(500000), bitcoin(49), ether(499900), owner.address, MAX_UINT_256);
     
       return router;
@@ -60,7 +60,7 @@ const initUniswapRouter = async(owner: Account, weth:  Contract, dai:  StandardT
       await  weth.approve(router.address, MAX_UINT_256);
       await dai.approve(router.address, MAX_UINT_256);
       await btc.approve(router.address, MAX_UINT_256);
-      await router.addLiquidity(weth.address, dai.address, ether(400), ether(400000), ether(390), ether(399000), owner.address, MAX_UINT_256);
+      await router.addLiquidity(weth.address, dai.address, ether(40), ether(40000), ether(39), ether(39900), owner.address, MAX_UINT_256);
       await router.addLiquidity(btc.address, dai.address, bitcoin(40), ether(400000), ether(39), ether(399000), owner.address, MAX_UINT_256);
       return router;
 }
@@ -178,8 +178,8 @@ class Context {
       this.tokens.btc = await (await ethers.getContractFactory("StandardTokenMock")).deploy(this.accounts.owner.address, bitcoin(1000000), "MockBtc", "MBTC", 8);
       this.tokens.weth = await new WETH9__factory(this.accounts.owner.wallet).deploy();
 
-      await this.tokens.weth.connect(this.accounts.bob.wallet).deposit({value: ether(1000)});
-      await this.tokens.weth.deposit({value: ether(1000)});
+      await this.tokens.weth.connect(this.accounts.bob.wallet).deposit({value: ether(500)});
+      await this.tokens.weth.deposit({value: ether(500)});
       await this.tokens.dai.transfer(this.accounts.bob.address, ether(2000));
       
       this.router = isMockDex? 
